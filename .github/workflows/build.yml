@@ -45,7 +45,16 @@ jobs:
           KEY_ALIAS: nvict-reader
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease bundleRelease
+          set +e
+          ./gradlew --no-daemon --console=plain assembleRelease bundleRelease 2>&1 | tee build.log
+          RC=${PIPESTATUS[0]}
+          if [ "$RC" != "0" ]; then
+            # Fouten als annotaties, zodat ze ook zonder het volledige log leesbaar zijn
+            grep -E "^e: |^w: .*deprecat|What went wrong|Caused by|Could not|Unresolved|^> " build.log | head -60 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+          fi
+          exit $RC
 
       - name: Bestanden hernoemen
         run: |
