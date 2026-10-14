@@ -64,7 +64,7 @@ jobs:
           ls -l out
 
       - name: Artifact (ook bij onondertekende testbuild)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: NVictReader-1.0.${{ github.run_number }}
           path: out/*
