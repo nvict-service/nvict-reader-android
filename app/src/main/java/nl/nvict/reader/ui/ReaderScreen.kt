@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -150,10 +153,10 @@ fun ReaderScreen(vm: ReaderViewModel) {
                         },
                         navigationIcon = {
                             Icon(
-                                painterResource(R.drawable.ic_launcher_foreground),
+                                painterResource(R.drawable.reader_logo),
                                 contentDescription = null,
                                 tint = Color.Unspecified,
-                                modifier = Modifier.size(56.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp).size(32.dp),
                             )
                         },
                         actions = {
@@ -340,7 +343,10 @@ private fun SearchBar(state: DocState, vm: ReaderViewModel, onClose: () -> Unit)
 private fun SelectionBar(onCopy: () -> Unit, onSelectPage: () -> Unit, onClose: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp, shadowElevation = 6.dp) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(onClick = onCopy) {
@@ -468,7 +474,7 @@ private fun ReaderDialogs(which: ReaderDialog, state: DocState?, vm: ReaderViewM
         ReaderDialog.About -> AlertDialog(
             onDismissRequest = onDismiss,
             confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
-            icon = { Icon(painterResource(R.drawable.ic_launcher_foreground), null, tint = Color.Unspecified, modifier = Modifier.size(72.dp)) },
+            icon = { Icon(painterResource(R.drawable.reader_logo), null, tint = Color.Unspecified, modifier = Modifier.size(64.dp)) },
             title = { Text(stringResource(R.string.app_name)) },
             text = { Text(stringResource(R.string.about_text)) },
         )
