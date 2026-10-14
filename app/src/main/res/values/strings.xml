@@ -33,4 +33,26 @@
     <string name="remove_from_recent">Verwijderen uit lijst</string>
     <string name="fit_width">Passend in breedte</string>
     <string name="night_pages">Donkere pagina\'s</string>
+    <string name="edit">Bewerken</string>
+    <string name="add_text">Tekst toevoegen</string>
+    <string name="edit_text">Tekst bewerken</string>
+    <string name="add_signature">Handtekening plaatsen</string>
+    <string name="new_signature">Nieuwe handtekening</string>
+    <string name="sign_here">Teken hier je handtekening</string>
+    <string name="clear">Wissen</string>
+    <string name="save">Opslaan</string>
+    <string name="save_as">Opslaan als…</string>
+    <string name="share_edited">Bewerkte versie delen</string>
+    <string name="undo">Ongedaan maken</string>
+    <string name="delete">Verwijderen</string>
+    <string name="highlight">Markeren</string>
+    <string name="highlight_hint">Markeren: houd tekst lang ingedrukt en kies Markeren</string>
+    <string name="font_size">Lettergrootte: %1$d pt</string>
+    <string name="saved">Opgeslagen</string>
+    <string name="save_failed">Opslaan mislukt: %1$s</string>
+    <string name="unsaved_title">Niet-opgeslagen wijzigingen</string>
+    <string name="unsaved_text">Dit document heeft wijzigingen die nog niet zijn opgeslagen.</string>
+    <string name="discard">Weggooien</string>
+    <string name="saving">Opslaan…</string>
+    <string name="no_signatures">Nog geen handtekeningen opgeslagen.</string>
 </resources>

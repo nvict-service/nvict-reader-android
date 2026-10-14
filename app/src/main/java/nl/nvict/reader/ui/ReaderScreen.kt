@@ -24,7 +24,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Draw
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
@@ -43,6 +49,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -80,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import io.legere.pdfiumandroid.api.Bookmark
 import nl.nvict.reader.R
 import nl.nvict.reader.data.RecentFile
+import nl.nvict.reader.pdf.Annotation
 import java.text.DateFormat
 import java.util.Date
 
@@ -127,6 +135,21 @@ fun ReaderScreen(vm: ReaderViewModel) {
     val state = active
     LaunchedEffect(state.doc.id) { searchOpen = state.searchQuery.isNotBlank() }
 
+    var editMenuOpen by remember { mutableStateOf(false) }
+    var saveMenuOpen by remember { mutableStateOf(false) }
+    var textDialog by remember { mutableStateOf<TextDialogRequest?>(null) }
+    var signaturePicker by remember { mutableStateOf(false) }
+    var closeConfirm by remember { mutableStateOf<DocState?>(null) }
+    val requestClose: (DocState) -> Unit = { d -> if (d.dirty) closeConfirm = d else vm.close(d.doc.id) }
+
+    // Tik op geselecteerde tekst of "Bewerken" in de balk opent de tekstdialoog
+    LaunchedEffect(state.editingText) {
+        state.editingText?.let {
+            textDialog = TextDialogRequest(it)
+            state.editingText = null
+        }
+    }
+
     Scaffold(
         topBar = {
             Column {
@@ -161,8 +184,67 @@ fun ReaderScreen(vm: ReaderViewModel) {
                             IconButton(onClick = { searchOpen = true }) {
                                 Icon(Icons.Default.Search, stringResource(R.string.search))
                             }
-                            IconButton(onClick = pick) {
-                                Icon(Icons.Default.FolderOpen, stringResource(R.string.open_file))
+                            // Bewerken: tekst, handtekening (markeren gaat via tekstselectie)
+                            Box {
+                                IconButton(onClick = { editMenuOpen = true }) {
+                                    Icon(Icons.Default.Edit, stringResource(R.string.edit))
+                                }
+                                DropdownMenu(expanded = editMenuOpen, onDismissRequest = { editMenuOpen = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.add_text)) },
+                                        leadingIcon = { Icon(Icons.Default.TextFields, null) },
+                                        onClick = {
+                                            editMenuOpen = false
+                                            textDialog = TextDialogRequest(null)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.add_signature)) },
+                                        leadingIcon = { Icon(Icons.Default.Draw, null) },
+                                        onClick = {
+                                            editMenuOpen = false
+                                            signaturePicker = true
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                stringResource(R.string.highlight_hint),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.BorderColor, null) },
+                                        enabled = false,
+                                        onClick = {},
+                                    )
+                                }
+                            }
+                            if (state.canUndo) {
+                                IconButton(onClick = { vm.undo(state) }) {
+                                    Icon(Icons.AutoMirrored.Filled.Undo, stringResource(R.string.undo))
+                                }
+                            }
+                            if (state.dirty) {
+                                Box {
+                                    IconButton(onClick = { saveMenuOpen = true }, enabled = !state.saving) {
+                                        Icon(Icons.Default.Save, stringResource(R.string.save), tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                    DropdownMenu(expanded = saveMenuOpen, onDismissRequest = { saveMenuOpen = false }) {
+                                        DropdownMenuItem(text = { Text(stringResource(R.string.save)) }, onClick = {
+                                            saveMenuOpen = false
+                                            vm.save(state)
+                                        })
+                                        DropdownMenuItem(text = { Text(stringResource(R.string.save_as)) }, onClick = {
+                                            saveMenuOpen = false
+                                            vm.requestSaveAs(state)
+                                        })
+                                        DropdownMenuItem(text = { Text(stringResource(R.string.share_edited)) }, onClick = {
+                                            saveMenuOpen = false
+                                            vm.shareEdited(state)
+                                        })
+                                    }
+                                }
                             }
                             Box {
                                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, null) }
@@ -174,6 +256,7 @@ fun ReaderScreen(vm: ReaderViewModel) {
                                             action()
                                         })
                                     }
+                                    item(R.string.open_file) { pick() }
                                     item(R.string.goto_page) { dialog = ReaderDialog.GoToPage }
                                     item(R.string.outline) { dialog = ReaderDialog.Outline }
                                     item(R.string.fit_width) { state.scale = 1f }
@@ -193,7 +276,7 @@ fun ReaderScreen(vm: ReaderViewModel) {
                                     HorizontalDivider()
                                     item(R.string.document_info) { dialog = ReaderDialog.Info }
                                     item(R.string.about) { dialog = ReaderDialog.About }
-                                    item(R.string.close_document) { vm.close(state.doc.id) }
+                                    item(R.string.close_document) { requestClose(state) }
                                 }
                             }
                         },
@@ -203,7 +286,9 @@ fun ReaderScreen(vm: ReaderViewModel) {
                     )
                 }
                 if (docs.size > 1) {
-                    DocumentTabs(docs = docs, active = state, onSelect = { vm.setActive(it) }, onClose = { vm.close(it) })
+                    DocumentTabs(docs = docs, active = state, onSelect = { vm.setActive(it) }, onClose = { id ->
+                        docs.firstOrNull { it.doc.id == id }?.let { requestClose(it) }
+                    })
                 }
             }
         },
@@ -211,6 +296,9 @@ fun ReaderScreen(vm: ReaderViewModel) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             PdfPagesView(state = state, darkPages = darkPages, vm = vm)
+            if (state.saving) {
+                LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
+            }
 
             // Paginateller
             Surface(
@@ -233,7 +321,57 @@ fun ReaderScreen(vm: ReaderViewModel) {
     }
 
     dialog?.let { ReaderDialogs(it, state, vm) { dialog = null } }
+
+    textDialog?.let { req ->
+        val existing = req.id?.let { id -> state.annotations.firstOrNull { it.id == id } as? Annotation.Text }
+        TextAnnotationDialog(
+            initial = existing,
+            onDismiss = { textDialog = null },
+            onConfirm = { text, size, color ->
+                if (existing != null) vm.updateText(state, existing.id, text, size, color)
+                else vm.addText(state, text, size, color)
+                textDialog = null
+            },
+        )
+    }
+
+    if (signaturePicker) {
+        SignaturePickerDialog(
+            onDismiss = { signaturePicker = false },
+            onPick = { bitmap ->
+                signaturePicker = false
+                vm.addSignature(state, bitmap)
+            },
+        )
+    }
+
+    closeConfirm?.let { d ->
+        AlertDialog(
+            onDismissRequest = { closeConfirm = null },
+            title = { Text(stringResource(R.string.unsaved_title)) },
+            text = { Text(stringResource(R.string.unsaved_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    closeConfirm = null
+                    vm.setActive(d.doc.id)
+                    vm.save(d, closeAfter = true)
+                }) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { closeConfirm = null }) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = {
+                        closeConfirm = null
+                        vm.close(d.doc.id)
+                    }) { Text(stringResource(R.string.discard), color = MaterialTheme.colorScheme.error) }
+                }
+            },
+        )
+    }
 }
+
+/** Dialoog voor nieuwe tekst ([id] == null) of het bewerken van bestaande tekst. */
+data class TextDialogRequest(val id: Long?)
 
 @Composable
 private fun DocumentTabs(

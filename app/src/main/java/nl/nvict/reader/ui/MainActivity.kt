@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.FileProvider
@@ -18,6 +19,14 @@ import nl.nvict.reader.export.PdfPrintAdapter
 class MainActivity : ComponentActivity() {
 
     private val vm: ReaderViewModel by viewModels()
+
+    /** Document dat wacht op een locatie voor "Opslaan als". */
+    private var pendingSaveAs: DocState? = null
+    private val saveAsLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        val state = pendingSaveAs
+        pendingSaveAs = null
+        if (uri != null && state != null) vm.save(state, uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +71,10 @@ class MainActivity : ComponentActivity() {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 startActivity(Intent.createChooser(send, event.title))
+            }
+            is UiEvent.SaveAs -> {
+                pendingSaveAs = event.state
+                saveAsLauncher.launch(event.suggestedName)
             }
             is UiEvent.Print -> lifecycleScope.launch {
                 PdfPrintAdapter.print(this@MainActivity, event.uri, event.name)

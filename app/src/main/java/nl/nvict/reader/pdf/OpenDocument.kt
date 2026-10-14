@@ -163,6 +163,19 @@ class OpenDocument private constructor(
         }
     }
 
+    /**
+     * Zet een genormaliseerd punt (0..1 van de weergegeven pagina) om naar PDF-paginacoördinaten (punten,
+     * oorsprong linksonder), rekening houdend met rotatie en cropbox.
+     */
+    suspend fun toPagePoints(pageIndex: Int, points: List<Pair<Float, Float>>): List<android.graphics.PointF> = locked {
+        val p = page(pageIndex)
+        val w = 4000
+        val h = (w * pageSizes[pageIndex].ratio).toInt().coerceAtLeast(1)
+        points.map { (nx, ny) ->
+            p.mapDeviceCoordsToPage(0, 0, w, h, 0, (nx * w).toInt(), (ny * h).toInt())
+        }
+    }
+
     suspend fun outline(): List<Bookmark> = locked { doc.getTableOfContents() }
 
     suspend fun meta(): Meta = locked { doc.getDocumentMeta() }

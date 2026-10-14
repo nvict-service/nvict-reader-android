@@ -42,29 +42,21 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import nl.nvict.reader.R
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import nl.nvict.reader.pdf.Annotation
 import nl.nvict.reader.pdf.PageBitmapCache
 import nl.nvict.reader.pdf.PageLink
 import android.graphics.Rect as ARect
@@ -282,6 +274,49 @@ private fun PageItem(
                 val tolerance = 24.dp.toPx()
                 awaitEachGesture {
                     val down = awaitFirstDown()
+                    val pageWidthPt = doc.pageSizes[pageIndex].widthPt
+                    val mine = state.annotations.filter { it.page == pageIndex }
+
+                    // 0a) Schaalgreep van de geselecteerde handtekening/afbeelding
+                    val selectedImg = mine.firstOrNull { it.id == state.selectedAnnotation } as? Annotation.Image
+                    if (selectedImg != null) {
+                        val b = annotationBounds(selectedImg, widthPx, heightPx, pageWidthPt).inflate(4.dp.toPx())
+                        if ((down.position - b.bottomRight).getDistance() < handleRadius * 2.5f) {
+                            down.consume()
+                            vm.beginTransform(state)
+                            drag(down.id) { ch ->
+                                ch.consume()
+                                vm.resizeImage(state, selectedImg.id, ch.position.x / widthPx)
+                            }
+                            return@awaitEachGesture
+                        }
+                    }
+
+                    // 0b) Tekst of handtekening vastpakken: verslepen (tik op geselecteerde tekst = bewerken)
+                    val movable = hitTest(mine.filter { it !is Annotation.Highlight }, down.position, widthPx, heightPx, pageWidthPt, tolerance / 2)
+                    if (movable != null) {
+                        down.consume()
+                        state.selection = null
+                        val wasSelected = state.selectedAnnotation == movable.id
+                        state.selectedAnnotation = movable.id
+                        var moved = false
+                        var pending = Offset.Zero
+                        drag(down.id) { ch ->
+                            val d = ch.positionChange()
+                            ch.consume()
+                            if (!moved) {
+                                pending += d
+                                if (pending.getDistance() < viewConfiguration.touchSlop) return@drag
+                                vm.beginTransform(state)
+                                moved = true
+                                vm.moveAnnotation(state, movable.id, pending.x / widthPx, pending.y / heightPx)
+                            } else {
+                                vm.moveAnnotation(state, movable.id, d.x / widthPx, d.y / heightPx)
+                            }
+                        }
+                        if (!moved && wasSelected && movable is Annotation.Text) state.editingText = movable.id
+                        return@awaitEachGesture
+                    }
 
                     // 1) Greep van een bestaande selectie vastgepakt? Dan direct slepen.
                     val sel = state.selection?.takeIf { it.page == pageIndex }
@@ -307,6 +342,7 @@ private fun PageItem(
                         val stillPressed = currentEvent.changes.any { it.id == down.id && it.pressed && !it.isConsumed }
                         if (!stillPressed) return@awaitEachGesture
                         down.consume()
+                        state.selectedAnnotation = null
                         var anchor = -1
                         val anchorJob = scope.launch {
                             val idx = runCatchingSuspend {
@@ -334,9 +370,16 @@ private fun PageItem(
                         onDoubleTap(up.position)
                         return@awaitEachGesture
                     }
-                    // 4) Enkele tik: selectie opheffen, of link openen
-                    if (state.selection != null) {
+                    // 4) Enkele tik: markering selecteren, selectie opheffen, of link openen
+                    val hl = hitTest(mine.filterIsInstance<Annotation.Highlight>(), up.position, widthPx, heightPx, pageWidthPt, tolerance / 2)
+                    if (hl != null) {
                         state.selection = null
+                        state.selectedAnnotation = hl.id
+                        return@awaitEachGesture
+                    }
+                    if (state.selection != null || state.selectedAnnotation != null) {
+                        state.selection = null
+                        state.selectedAnnotation = null
                         return@awaitEachGesture
                     }
                     val px = up.position.x.roundToInt()
@@ -374,11 +417,40 @@ private fun PageItem(
                 }
             }
         }
+        val pageAnnots = state.annotations.filter { it.page == pageIndex }
+        if (pageAnnots.isNotEmpty()) {
+            val pageWidthPt = doc.pageSizes[pageIndex].widthPt
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawAnnotations(
+                    annots = pageAnnots,
+                    selectedId = state.selectedAnnotation,
+                    widthPx = widthPx,
+                    heightPx = heightPx,
+                    pageWidthPt = pageWidthPt,
+                    darkPages = darkPages,
+                    accent = NVictColors.Accent,
+                    handleRadius = HANDLE_RADIUS.toPx(),
+                )
+            }
+            pageAnnots.firstOrNull { it.id == state.selectedAnnotation }?.let { a ->
+                val density = LocalDensity.current
+                AnnotationBar(
+                    annotation = a,
+                    anchor = annotationBounds(a, widthPx, heightPx, pageWidthPt),
+                    pageWidthPx = widthPx,
+                    handleGap = with(density) { (HANDLE_RADIUS * 2).roundToPx() },
+                    onColor = { vm.setHighlightColor(state, a.id, it) },
+                    onEdit = { state.editingText = a.id },
+                    onDelete = { vm.deleteAnnotation(state, a.id) },
+                )
+            }
+        }
         if (selection != null && selectionRects.isNotEmpty()) {
             SelectionToolbar(
                 rects = selectionRects,
                 pageWidthPx = widthPx,
                 onCopy = { vm.copySelection(state) },
+                onHighlight = { vm.highlightSelection(state) },
                 onSelectAll = { vm.selectWholePage(state) },
             )
         }
@@ -398,28 +470,24 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHandle(anchor: 
 
 /** Zwevende werkbalk boven (of onder) de selectie, zoals de standaard Android-tekstselectie. */
 @Composable
-private fun SelectionToolbar(rects: List<ARect>, pageWidthPx: Int, onCopy: () -> Unit, onSelectAll: () -> Unit) {
+private fun SelectionToolbar(
+    rects: List<ARect>,
+    pageWidthPx: Int,
+    onCopy: () -> Unit,
+    onHighlight: () -> Unit,
+    onSelectAll: () -> Unit,
+) {
     val density = LocalDensity.current
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    val gap = with(density) { 8.dp.roundToPx() }
-    val handle = with(density) { (HANDLE_RADIUS * 2).roundToPx() }
-    val top = rects.minOf { it.top }
-    val bottom = rects.maxOf { it.bottom }
-    val x = (rects.first().left).coerceIn(0, (pageWidthPx - size.width).coerceAtLeast(0))
-    val y = if (top - size.height - gap >= 0) top - size.height - gap else bottom + handle + gap
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shadowElevation = 6.dp,
-        tonalElevation = 3.dp,
-        modifier = Modifier
-            .offset { IntOffset(x, y) }
-            .onSizeChanged { size = it },
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onCopy) { Text(stringResource(R.string.copy)) }
-            TextButton(onClick = onSelectAll) { Text(stringResource(R.string.select_all_page)) }
-        }
+    val anchor = androidx.compose.ui.geometry.Rect(
+        rects.first().left.toFloat(),
+        rects.minOf { it.top }.toFloat(),
+        rects.maxOf { it.right }.toFloat(),
+        rects.maxOf { it.bottom }.toFloat(),
+    )
+    FloatingBar(anchor = anchor, pageWidthPx = pageWidthPx, belowGap = with(density) { (HANDLE_RADIUS * 2).roundToPx() }) {
+        TextButton(onClick = onCopy) { Text(stringResource(R.string.copy)) }
+        TextButton(onClick = onHighlight) { Text(stringResource(R.string.highlight)) }
+        TextButton(onClick = onSelectAll) { Text(stringResource(R.string.select_all_page)) }
     }
 }
 

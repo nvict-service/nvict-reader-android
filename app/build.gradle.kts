@@ -85,6 +85,8 @@ dependencies {
 
     // PDF-engine (Pdfium, Apache 2.0)
     implementation("io.legere:pdfiumandroid:2.0.3")
+    // PDF schrijven: markeringen, tekst en handtekeningen (Apache 2.0)
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 }

@@ -10,6 +10,10 @@ Pdfium-engine (Apache 2.0, dus zonder licentiekosten geschikt voor de Play Store
 - Zoeken in het hele document met markeringen en vorige/volgende.
 - Tekst selecteren: lang indrukken en slepen, daarna kopiëren of de hele pagina selecteren.
 - Links in het document (web en interne verwijzingen), inhoudsopgave (bladwijzers), documentinfo.
+- **Bewerken** (potloodknop): tekst toevoegen (lettergrootte en kleur), handtekening plaatsen (met de vinger tekenen,
+  wordt bewaard voor hergebruik, verslepen en schalen) en markeren (tekst selecteren → Markeren, kleur aanpasbaar).
+  Ongedaan maken, daarna Opslaan (overschrijft het origineel), Opslaan als… of Bewerkte versie delen. Bijlagen uit de
+  mail zijn alleen-lezen; daar vraagt de app automatisch om een nieuwe locatie.
 - Pagina's exporteren naar een nieuwe PDF (bijv. `1-3,5`), document delen, pagina delen als afbeelding, afdrukken.
 - Licht/donker thema volgt Android; optioneel donkere pagina's.
 - Beveiligde PDF's met wachtwoord.
@@ -63,6 +67,8 @@ Release notes voor Play staan in `distribution/whatsnew/whatsnew-nl-NL`; pas die
 - Pakketnaam `nl.nvict.reader`, minimaal Android 8.0 (API 26), target API 36.
 - PDF-engine: `io.legere:pdfiumandroid` (Pdfium-binding, Apache 2.0). Tekst, links en zoeken komen rechtstreeks
   uit Pdfium; pagina's worden als bitmap gerenderd en in een LRU-cache bewaard.
+- Bewerkingen worden met PdfBox-Android (Apache 2.0) geschreven: markeringen als echte PDF-highlight-annotaties,
+  tekst en handtekeningen in de pagina-inhoud. Pdfium rekent schermposities om naar PDF-coördinaten.
 - Pagina's exporteren gebeurt met Pdfium zelf (kopie openen, andere pagina's verwijderen, opslaan).
 - Afdrukken geeft het originele PDF-bestand door aan het Android-printsysteem.
 - Toolchain: Gradle 9.6.1, Android Gradle Plugin 9.3.1 (ingebouwde Kotlin), Kotlin 2.4.10, Compose BOM 2026.06.01, JDK 21.
