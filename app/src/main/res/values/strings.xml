@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NVict Reader</string>
+    <string name="open_file">PDF openen</string>
+    <string name="recent_files">Recente bestanden</string>
+    <string name="no_recent">Nog geen bestanden geopend. Tik op PDF openen of open een PDF vanuit je mail of Bestanden.</string>
+    <string name="search">Zoeken</string>
+    <string name="search_hint">Zoek in document</string>
+    <string name="search_none">Niets gevonden</string>
+    <string name="goto_page">Ga naar pagina</string>
+    <string name="outline">Inhoudsopgave</string>
+    <string name="outline_none">Dit document heeft geen inhoudsopgave.</string>
+    <string name="export_pages">Pagina\'s exporteren</string>
+    <string name="export_pages_hint">Bijvoorbeeld 1-3,5</string>
+    <string name="share_document">Document delen</string>
+    <string name="share_page_image">Pagina delen als afbeelding</string>
+    <string name="print">Afdrukken</string>
+    <string name="document_info">Documentinfo</string>
+    <string name="close_document">Sluiten</string>
+    <string name="copy">Kopiëren</string>
+    <string name="copied">Tekst gekopieerd</string>
+    <string name="select_all_page">Hele pagina</string>
+    <string name="page_of">Pagina %1$d van %2$d</string>
+    <string name="password_title">Wachtwoord vereist</string>
+    <string name="password_hint">Wachtwoord</string>
+    <string name="password_wrong">Onjuist wachtwoord</string>
+    <string name="open_failed">Dit bestand kan niet worden geopend.</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Annuleren</string>
+    <string name="about">Over NVict Reader</string>
+    <string name="about_text">NVict Reader voor Android\nOntwikkeld door NVict Service\nwww.nvict.nl</string>
+    <string name="clear_recent">Lijst wissen</string>
+    <string name="remove_from_recent">Verwijderen uit lijst</string>
+    <string name="fit_width">Passend in breedte</string>
+    <string name="night_pages">Donkere pagina\'s</string>
+</resources>
