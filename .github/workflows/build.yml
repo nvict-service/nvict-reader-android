@@ -50,9 +50,9 @@ jobs:
           RC=${PIPESTATUS[0]}
           if [ "$RC" != "0" ]; then
             # Fouten als annotaties, zodat ze ook zonder het volledige log leesbaar zijn
-            grep -E "^e: |^w: .*deprecat|What went wrong|Caused by|Could not|Unresolved|^> " build.log | head -60 | while IFS= read -r line; do
-              echo "::error::${line}"
-            done
+            { grep -E "^e: " build.log | head -40; grep -A8 "What went wrong" build.log | head -60; } > errors.txt
+            MSG=$(head -c 3800 errors.txt | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error::${MSG}"
           fi
           exit $RC
 
