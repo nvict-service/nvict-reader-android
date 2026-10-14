@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -337,27 +340,32 @@ private fun StartScreen(
     onAbout: () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.systemBars)
+                .padding(horizontal = 20.dp),
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
             ) {
                 Icon(
-                    painterResource(R.drawable.nvict_logo),
+                    painterResource(R.drawable.reader_logo),
                     contentDescription = null,
                     tint = Color.Unspecified,
-                    modifier = Modifier.height(36.dp),
+                    modifier = Modifier.size(72.dp),
+                )
+                Text(
+                    stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 16.dp),
                 )
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onAbout) { Icon(Icons.Default.Info, stringResource(R.string.about)) }
             }
-            Text(
-                stringResource(R.string.app_name),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 20.dp),
-            )
-            Button(onClick = onOpen, modifier = Modifier.padding(top = 16.dp)) {
+            Button(onClick = onOpen, modifier = Modifier.padding(top = 24.dp)) {
                 Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.open_file))
