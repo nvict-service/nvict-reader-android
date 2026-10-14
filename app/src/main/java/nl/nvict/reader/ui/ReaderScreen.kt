@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,7 +22,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
@@ -34,7 +30,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -209,15 +204,6 @@ fun ReaderScreen(vm: ReaderViewModel) {
                 }
             }
         },
-        bottomBar = {
-            if (state.selection != null) {
-                SelectionBar(
-                    onCopy = { vm.copySelection(state) },
-                    onSelectPage = { vm.selectWholePage(state) },
-                    onClose = { state.selection = null },
-                )
-            }
-        },
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -337,32 +323,6 @@ private fun SearchBar(state: DocState, vm: ReaderViewModel, onClose: () -> Unit)
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
     )
-}
-
-@Composable
-private fun SelectionBar(onCopy: () -> Unit, onSelectPage: () -> Unit, onClose: () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp, shadowElevation = 6.dp) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(onClick = onCopy) {
-                Icon(Icons.Default.ContentCopy, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.copy))
-            }
-            TextButton(onClick = onSelectPage) {
-                Icon(Icons.Default.SelectAll, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.select_all_page))
-            }
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = onClose) { Icon(Icons.Default.Close, stringResource(R.string.cancel)) }
-        }
-    }
 }
 
 // ------------------------------------------------------------------ startscherm

@@ -47,6 +47,20 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.res.stringResource
+import nl.nvict.reader.R
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -264,48 +278,55 @@ private fun PageItem(
             .shadow(2.dp)
             .background(pageBackground)
             .pointerInput(doc.id, pageIndex, widthPx, heightPx) {
+                val handleRadius = HANDLE_RADIUS.toPx()
+                val tolerance = 24.dp.toPx()
                 awaitEachGesture {
                     val down = awaitFirstDown()
+
+                    // 1) Greep van een bestaande selectie vastgepakt? Dan direct slepen.
+                    val sel = state.selection?.takeIf { it.page == pageIndex }
+                    val rects = selectionRects
+                    if (sel != null && rects.isNotEmpty()) {
+                        val startHandle = Offset(rects.first().left.toFloat(), rects.first().bottom + handleRadius)
+                        val endHandle = Offset(rects.last().right.toFloat(), rects.last().bottom + handleRadius)
+                        val grabStart = (down.position - startHandle).getDistance() < handleRadius * 1.8f
+                        val grabEnd = !grabStart && (down.position - endHandle).getDistance() < handleRadius * 1.8f
+                        if (grabStart || grabEnd) {
+                            down.consume()
+                            val fixed = if (grabStart) sel.start + sel.count - 1 else sel.start
+                            dragSelection(scope, down.id, doc, pageIndex, widthPx, heightPx, tolerance, handleRadius * 2) { idx ->
+                                state.selection = if (grabStart) Selection(pageIndex, idx, fixed) else Selection(pageIndex, fixed, idx)
+                            }
+                            return@awaitEachGesture
+                        }
+                    }
+
                     val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) { waitForUpOrCancellation() }
                     if (up == null) {
-                        // Geen 'up' binnen de tijd: lang ingedrukt (selectie), of geannuleerd door scrollen
+                        // 2) Lang ingedrukt: woord selecteren, daarna slepen verlengt de selectie
                         val stillPressed = currentEvent.changes.any { it.id == down.id && it.pressed && !it.isConsumed }
                         if (!stillPressed) return@awaitEachGesture
-                        // Opzoeken van tekenposities gebeurt buiten de pointer-lus (die mag niet elders suspenden)
                         down.consume()
-                        var anchorIdx = -1
+                        var anchor = -1
                         val anchorJob = scope.launch {
-                            anchorIdx = runCatchingSuspend {
-                                doc.charIndexAt(pageIndex, widthPx, heightPx, down.position.x.roundToInt(), down.position.y.roundToInt())
+                            val idx = runCatchingSuspend {
+                                doc.charIndexAt(pageIndex, widthPx, heightPx, down.position.x.roundToInt(), down.position.y.roundToInt(), tolerance)
                             } ?: -1
-                            if (anchorIdx >= 0) {
+                            val word = if (idx >= 0) runCatchingSuspend { doc.wordAt(pageIndex, idx) } else null
+                            if (word != null) {
+                                anchor = word.first
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                state.selection = Selection(pageIndex, anchorIdx, anchorIdx)
+                                state.selection = Selection(pageIndex, word.first, word.second)
+                            } else {
+                                state.selection = null
                             }
                         }
-                        var latest: Offset? = null
-                        var lookup: Job? = null
-                        drag(down.id) { change ->
-                            change.consume()
-                            latest = change.position
-                            if (lookup?.isActive != true) {
-                                lookup = scope.launch {
-                                    anchorJob.join()
-                                    if (anchorIdx < 0) return@launch
-                                    while (true) {
-                                        val p = latest ?: break
-                                        latest = null
-                                        val x = p.x.roundToInt().coerceIn(0, widthPx)
-                                        val y = p.y.roundToInt().coerceIn(0, heightPx)
-                                        val idx = runCatchingSuspend { doc.charIndexAt(pageIndex, widthPx, heightPx, x, y) } ?: -1
-                                        if (idx >= 0) state.selection = Selection(pageIndex, anchorIdx, idx)
-                                    }
-                                }
-                            }
+                        dragSelection(scope, down.id, doc, pageIndex, widthPx, heightPx, tolerance, 0f, before = { anchorJob.join(); anchor >= 0 }) { idx ->
+                            state.selection = Selection(pageIndex, anchor, idx)
                         }
                         return@awaitEachGesture
                     }
-                    // Tik: dubbeltik?
+                    // 3) Tik: dubbeltik?
                     val second = withTimeoutOrNull(viewConfiguration.doubleTapTimeoutMillis) { awaitFirstDown() }
                     if (second != null) {
                         second.consume()
@@ -313,7 +334,7 @@ private fun PageItem(
                         onDoubleTap(up.position)
                         return@awaitEachGesture
                     }
-                    // Enkele tik
+                    // 4) Enkele tik: selectie opheffen, of link openen
                     if (state.selection != null) {
                         state.selection = null
                         return@awaitEachGesture
@@ -335,6 +356,7 @@ private fun PageItem(
         }
         if (selectionRects.isNotEmpty() || hitRects.isNotEmpty()) {
             val selColor = if (isDark) NVictColors.SelectionDark else NVictColors.SelectionLight
+            val handleColor = NVictColors.Accent
             Canvas(modifier = Modifier.fillMaxSize()) {
                 hitRects.forEach { (rects, current) ->
                     val c = if (current) NVictColors.SearchHitCurrent else NVictColors.SearchHit
@@ -342,6 +364,96 @@ private fun PageItem(
                 }
                 selectionRects.forEach { r ->
                     drawRect(selColor, Offset(r.left.toFloat(), r.top.toFloat()), Size(r.width().toFloat(), r.height().toFloat()))
+                }
+                if (selectionRects.isNotEmpty()) {
+                    val radius = HANDLE_RADIUS.toPx()
+                    val first = selectionRects.first()
+                    val last = selectionRects.last()
+                    drawHandle(Offset(first.left.toFloat(), first.bottom.toFloat()), radius, handleColor, left = true)
+                    drawHandle(Offset(last.right.toFloat(), last.bottom.toFloat()), radius, handleColor, left = false)
+                }
+            }
+        }
+        if (selection != null && selectionRects.isNotEmpty()) {
+            SelectionToolbar(
+                rects = selectionRects,
+                pageWidthPx = widthPx,
+                onCopy = { vm.copySelection(state) },
+                onSelectAll = { vm.selectWholePage(state) },
+            )
+        }
+    }
+}
+
+private val HANDLE_RADIUS = 11.dp
+
+/** Tekent een Android-achtige selectiegreep: een druppel onder de tekstrand. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawHandle(anchor: Offset, radius: Float, color: Color, left: Boolean) {
+    val center = Offset(anchor.x + if (left) -radius else radius, anchor.y + radius)
+    drawCircle(color, radius, center)
+    // Hoekje tegen de tekst aan, zodat de druppel aan de tekstrand 'hangt'
+    val corner = if (left) Offset(center.x + radius, center.y - radius) else Offset(center.x - radius, center.y - radius)
+    drawRect(color, Offset(minOf(corner.x, center.x), corner.y), Size(radius, radius))
+}
+
+/** Zwevende werkbalk boven (of onder) de selectie, zoals de standaard Android-tekstselectie. */
+@Composable
+private fun SelectionToolbar(rects: List<ARect>, pageWidthPx: Int, onCopy: () -> Unit, onSelectAll: () -> Unit) {
+    val density = LocalDensity.current
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    val gap = with(density) { 8.dp.roundToPx() }
+    val handle = with(density) { (HANDLE_RADIUS * 2).roundToPx() }
+    val top = rects.minOf { it.top }
+    val bottom = rects.maxOf { it.bottom }
+    val x = (rects.first().left).coerceIn(0, (pageWidthPx - size.width).coerceAtLeast(0))
+    val y = if (top - size.height - gap >= 0) top - size.height - gap else bottom + handle + gap
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shadowElevation = 6.dp,
+        tonalElevation = 3.dp,
+        modifier = Modifier
+            .offset { IntOffset(x, y) }
+            .onSizeChanged { size = it },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onCopy) { Text(stringResource(R.string.copy)) }
+            TextButton(onClick = onSelectAll) { Text(stringResource(R.string.select_all_page)) }
+        }
+    }
+}
+
+/**
+ * Sleept een selectie-uiteinde: de pointer-lus blijft licht, het opzoeken van tekenindexen gebeurt
+ * in een aparte coroutine (geconflateerd op de laatste vingerpositie).
+ */
+private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.dragSelection(
+    scope: kotlinx.coroutines.CoroutineScope,
+    pointerId: androidx.compose.ui.input.pointer.PointerId,
+    doc: nl.nvict.reader.pdf.OpenDocument,
+    pageIndex: Int,
+    widthPx: Int,
+    heightPx: Int,
+    tolerance: Float,
+    yOffset: Float,
+    before: suspend () -> Boolean = { true },
+    onIndex: (Int) -> Unit,
+) {
+    var latest: Offset? = null
+    var lookup: Job? = null
+    drag(pointerId) { change ->
+        change.consume()
+        latest = change.position
+        if (lookup?.isActive != true) {
+            lookup = scope.launch {
+                if (!before()) return@launch
+                while (true) {
+                    val p = latest ?: break
+                    latest = null
+                    val x = p.x.roundToInt().coerceIn(0, widthPx)
+                    val y = (p.y - yOffset).roundToInt().coerceIn(0, heightPx)
+                    val idx = runCatchingSuspend { doc.charIndexAt(pageIndex, widthPx, heightPx, x, y, tolerance) } ?: -1
+                    if (idx >= 0) onIndex(idx)
                 }
             }
         }

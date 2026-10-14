@@ -122,19 +122,35 @@ class OpenDocument private constructor(
         if (count <= 0) "" else textPage(pageIndex).textPageGetText(start, count) ?: ""
     }
 
+    private val textCache = HashMap<Int, String>()
+
     suspend fun pageText(pageIndex: Int): String = locked {
-        val tp = textPage(pageIndex)
-        val n = tp.textPageCountChars()
-        if (n <= 0) "" else tp.textPageGetText(0, n) ?: ""
+        textCache.getOrPut(pageIndex) {
+            val tp = textPage(pageIndex)
+            val n = tp.textPageCountChars()
+            if (n <= 0) "" else tp.textPageGetText(0, n) ?: ""
+        }
+    }
+
+    /** Het woord rond tekenindex [index] als (start, eindIndex inclusief), of null. */
+    suspend fun wordAt(pageIndex: Int, index: Int): Pair<Int, Int>? {
+        val text = pageText(pageIndex)
+        if (index !in text.indices || text[index].isWhitespace()) return null
+        var a = index
+        var b = index
+        while (a > 0 && !text[a - 1].isWhitespace()) a--
+        while (b < text.length - 1 && !text[b + 1].isWhitespace()) b++
+        return a to b
     }
 
     /** Index van het teken op een punt in pixels van de weergegeven pagina, of -1. */
-    suspend fun charIndexAt(pageIndex: Int, widthPx: Int, heightPx: Int, x: Int, y: Int): Int = locked {
-        val p = page(pageIndex)
-        val pt = p.mapDeviceCoordsToPage(0, 0, widthPx, heightPx, 0, x, y)
-        val tol = 8.0 * pageSizes[pageIndex].widthPt / widthPx
-        textPage(pageIndex).textPageGetCharIndexAtPos(pt.x.toDouble(), pt.y.toDouble(), tol * 2, tol * 2)
-    }
+    suspend fun charIndexAt(pageIndex: Int, widthPx: Int, heightPx: Int, x: Int, y: Int, tolerancePx: Float = 24f): Int =
+        locked {
+            val p = page(pageIndex)
+            val pt = p.mapDeviceCoordsToPage(0, 0, widthPx, heightPx, 0, x, y)
+            val tol = tolerancePx.toDouble() * pageSizes[pageIndex].widthPt / widthPx
+            textPage(pageIndex).textPageGetCharIndexAtPos(pt.x.toDouble(), pt.y.toDouble(), tol, tol)
+        }
 
     /** Rechthoeken (in pixels) die het tekenbereik omsluiten. */
     suspend fun rangeRects(pageIndex: Int, start: Int, count: Int, widthPx: Int, heightPx: Int): List<Rect> = locked {
