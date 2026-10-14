@@ -137,7 +137,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         state.searchJob?.cancel()
         val remaining = _docs.value - state
         _docs.value = remaining
-        if (_activeId.value == id) _activeId.value = remaining.lastOrNull()?.doc.id
+        if (_activeId.value == id) _activeId.value = remaining.lastOrNull()?.doc?.id
         viewModelScope.launch(Dispatchers.IO) {
             PageBitmapCache.evictDocument(id)
             state.doc.close()

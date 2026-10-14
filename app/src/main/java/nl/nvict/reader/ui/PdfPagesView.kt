@@ -271,14 +271,18 @@ private fun PageItem(
                         // Geen 'up' binnen de tijd: lang ingedrukt (selectie), of geannuleerd door scrollen
                         val stillPressed = currentEvent.changes.any { it.id == down.id && it.pressed && !it.isConsumed }
                         if (!stillPressed) return@awaitEachGesture
-                        val startIdx = runCatchingSuspend {
-                            doc.charIndexAt(pageIndex, widthPx, heightPx, down.position.x.roundToInt(), down.position.y.roundToInt())
-                        } ?: -1
-                        if (startIdx < 0) return@awaitEachGesture
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        state.selection = Selection(pageIndex, startIdx, startIdx)
+                        // Opzoeken van tekenposities gebeurt buiten de pointer-lus (die mag niet elders suspenden)
                         down.consume()
-                        // Positie opzoeken gebeurt buiten de pointer-lus (die mag niet lang blokkeren)
+                        var anchorIdx = -1
+                        val anchorJob = scope.launch {
+                            anchorIdx = runCatchingSuspend {
+                                doc.charIndexAt(pageIndex, widthPx, heightPx, down.position.x.roundToInt(), down.position.y.roundToInt())
+                            } ?: -1
+                            if (anchorIdx >= 0) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                state.selection = Selection(pageIndex, anchorIdx, anchorIdx)
+                            }
+                        }
                         var latest: Offset? = null
                         var lookup: Job? = null
                         drag(down.id) { change ->
@@ -286,13 +290,15 @@ private fun PageItem(
                             latest = change.position
                             if (lookup?.isActive != true) {
                                 lookup = scope.launch {
+                                    anchorJob.join()
+                                    if (anchorIdx < 0) return@launch
                                     while (true) {
                                         val p = latest ?: break
                                         latest = null
                                         val x = p.x.roundToInt().coerceIn(0, widthPx)
                                         val y = p.y.roundToInt().coerceIn(0, heightPx)
                                         val idx = runCatchingSuspend { doc.charIndexAt(pageIndex, widthPx, heightPx, x, y) } ?: -1
-                                        if (idx >= 0) state.selection = Selection(pageIndex, startIdx, idx)
+                                        if (idx >= 0) state.selection = Selection(pageIndex, anchorIdx, idx)
                                     }
                                 }
                             }
