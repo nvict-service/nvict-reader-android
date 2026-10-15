@@ -4,6 +4,11 @@ Android-versie van NVict Reader, de PDF-lezer van NVict Service. Native Kotlin/J
 Pdfium-engine (Apache 2.0, dus zonder licentiekosten geschikt voor de Play Store).
 
 ## Functies
+- Beginscherm zoals Fill & Sign: grote openknop en recente bestanden met miniatuur, tijdstip en grootte
+  ("Alles weergeven" voor de volledige lijst; lang indrukken om uit de lijst te halen).
+- Vaste **handtekening en paraaf** (pen-icoon op het beginscherm of in Bewerken): één keer tekenen, daarna met één tik
+  plaatsen. Opnieuw tekenen of verwijderen kan altijd.
+- Thema: Automatisch (volgt de telefoon), Licht of Donker — via ⋮ > Instellingen.
 - PDF openen via de knop, vanuit Bestanden, mail, browser of de deelfunctie; registreert zich als PDF-viewer.
 - Meerdere documenten tegelijk open (tabbladen), recente bestanden met onthouden pagina.
 - Knijpzoom, dubbeltikken om te zoomen, horizontaal scrollen bij inzoomen, passend in breedte.
