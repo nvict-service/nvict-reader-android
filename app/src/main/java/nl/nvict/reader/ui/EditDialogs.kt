@@ -23,22 +23,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Draw
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,7 +51,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,16 +65,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import kotlinx.coroutines.launch
 import nl.nvict.reader.R
-import nl.nvict.reader.data.SavedSignature
-import nl.nvict.reader.data.Signatures
+import nl.nvict.reader.data.SignatureKind
+import nl.nvict.reader.data.ThemeMode
 import nl.nvict.reader.pdf.Annotation
 import nl.nvict.reader.pdf.TextColors
 import kotlin.math.max
@@ -123,30 +121,31 @@ fun TextAnnotationDialog(
     )
 }
 
-// ------------------------------------------------------------------ handtekening kiezen
+// ------------------------------------------------------------------ handtekening en paraaf
 
+/**
+ * Overzicht van de vaste handtekening en paraaf (zoals in Fill & Sign).
+ * Met [onPlace] (in een document) plaatst een tik het item op de pagina; zonder [onPlace] (beginscherm)
+ * is het alleen beheren: tekenen, opnieuw tekenen en verwijderen.
+ */
 @Composable
-fun SignaturePickerDialog(onDismiss: () -> Unit, onPick: (Bitmap) -> Unit) {
-    val context = LocalContext.current
-    val store = remember { Signatures(context) }
-    val scope = rememberCoroutineScope()
-    var saved by remember { mutableStateOf<List<SavedSignature>?>(null) }
-    var drawing by remember { mutableStateOf(false) }
+fun SignaturesDialog(
+    saved: Map<SignatureKind, Bitmap>,
+    onDismiss: () -> Unit,
+    onSave: (SignatureKind, Bitmap) -> Unit,
+    onDelete: (SignatureKind) -> Unit,
+    onPlace: ((SignatureKind, Bitmap) -> Unit)? = null,
+) {
+    var drawing by remember { mutableStateOf<SignatureKind?>(null) }
 
-    LaunchedEffect(Unit) {
-        val list = store.list()
-        saved = list
-        if (list.isEmpty()) drawing = true // nog niets opgeslagen: direct tekenen
-    }
-
-    if (drawing) {
+    drawing?.let { kind ->
         SignaturePadDialog(
-            onDismiss = { if (saved.isNullOrEmpty()) onDismiss() else drawing = false },
+            kind = kind,
+            onDismiss = { drawing = null },
             onDone = { bmp ->
-                scope.launch {
-                    store.save(bmp)
-                    onPick(bmp)
-                }
+                drawing = null
+                onSave(kind, bmp)
+                onPlace?.invoke(kind, bmp)
             },
         )
         return
@@ -154,50 +153,138 @@ fun SignaturePickerDialog(onDismiss: () -> Unit, onPick: (Bitmap) -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.add_signature)) },
+        title = { Text(stringResource(R.string.signatures_title)) },
         text = {
-            val list = saved
-            when {
-                list == null -> CircularProgressIndicator()
-                list.isEmpty() -> Text(stringResource(R.string.no_signatures))
-                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(list, key = { it.file.name }) { sig ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(72.dp)
-                                    .background(Color.White, RoundedCornerShape(8.dp))
-                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                                    .clickable { onPick(sig.bitmap) }
-                                    .padding(8.dp),
-                            ) {
-                                Image(
-                                    bitmap = sig.bitmap.asImageBitmap(),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
-                            IconButton(onClick = {
-                                scope.launch {
-                                    store.delete(sig)
-                                    saved = store.list()
-                                }
-                            }) { Icon(Icons.Default.Delete, stringResource(R.string.delete)) }
-                        }
-                    }
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                SignatureKind.entries.forEach { kind ->
+                    SignatureRow(
+                        kind = kind,
+                        bitmap = saved[kind],
+                        placeMode = onPlace != null,
+                        onTap = {
+                            val bmp = saved[kind]
+                            if (bmp == null) drawing = kind
+                            else if (onPlace != null) onPlace(kind, bmp)
+                            else drawing = kind
+                        },
+                        onRedraw = { drawing = kind },
+                        onDelete = { onDelete(kind) },
+                    )
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = { drawing = true }) {
-                Icon(Icons.Default.Add, null, Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text(stringResource(R.string.new_signature))
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+    )
+}
+
+@Composable
+private fun SignatureRow(
+    kind: SignatureKind,
+    bitmap: Bitmap?,
+    placeMode: Boolean,
+    onTap: () -> Unit,
+    onRedraw: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Column {
+        Text(stringResource(kind.label()), style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(if (kind == SignatureKind.SIGNATURE) 76.dp else 60.dp)
+                    .background(Color.White, RoundedCornerShape(8.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                    .clickable(onClick = onTap)
+                    .padding(8.dp),
+            ) {
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = stringResource(kind.label()),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Add, null, tint = NVictColors.Accent, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.size(6.dp))
+                        Text(stringResource(kind.createLabel()), color = NVictColors.Accent)
+                    }
+                }
+            }
+            if (bitmap != null) {
+                IconButton(onClick = onRedraw) { Icon(Icons.Default.Edit, stringResource(R.string.redraw)) }
+                IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, stringResource(R.string.delete)) }
+            }
+        }
+        if (bitmap != null && placeMode) {
+            Text(
+                stringResource(R.string.tap_to_place),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+private fun SignatureKind.label() = if (this == SignatureKind.SIGNATURE) R.string.signature else R.string.initials
+private fun SignatureKind.createLabel() = if (this == SignatureKind.SIGNATURE) R.string.create_signature else R.string.create_initials
+private fun SignatureKind.padTitle() = if (this == SignatureKind.SIGNATURE) R.string.sign_here else R.string.initials_here
+
+// ------------------------------------------------------------------ instellingen
+
+@Composable
+fun SettingsDialog(
+    theme: ThemeMode,
+    onTheme: (ThemeMode) -> Unit,
+    darkPages: Boolean,
+    onDarkPages: (Boolean) -> Unit,
+    onSignatures: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.theme), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                listOf(
+                    ThemeMode.SYSTEM to R.string.theme_system,
+                    ThemeMode.LIGHT to R.string.theme_light,
+                    ThemeMode.DARK to R.string.theme_dark,
+                ).forEach { (mode, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onTheme(mode) }
+                            .padding(vertical = 2.dp),
+                    ) {
+                        RadioButton(selected = theme == mode, onClick = { onTheme(mode) })
+                        Text(stringResource(label))
+                    }
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { onDarkPages(!darkPages) }.padding(vertical = 4.dp),
+                ) {
+                    Text(stringResource(R.string.night_pages), modifier = Modifier.weight(1f))
+                    Switch(checked = darkPages, onCheckedChange = onDarkPages)
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                TextButton(onClick = onSignatures, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+                    Icon(Icons.Default.Draw, null, Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text(stringResource(R.string.signatures_title))
+                }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
     )
 }
 
@@ -206,7 +293,7 @@ fun SignaturePickerDialog(onDismiss: () -> Unit, onPick: (Bitmap) -> Unit) {
 private val PEN_COLORS = listOf(0xFF111111.toInt(), 0xFF0D47A1.toInt())
 
 @Composable
-fun SignaturePadDialog(onDismiss: () -> Unit, onDone: (Bitmap) -> Unit) {
+fun SignaturePadDialog(kind: SignatureKind, onDismiss: () -> Unit, onDone: (Bitmap) -> Unit) {
     val strokes = remember { mutableStateListOf<List<Offset>>() }
     var current by remember { mutableStateOf<List<Offset>>(emptyList()) }
     var penColor by remember { mutableIntStateOf(PEN_COLORS.first()) }
@@ -224,13 +311,13 @@ fun SignaturePadDialog(onDismiss: () -> Unit, onDone: (Bitmap) -> Unit) {
                     .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(16.dp),
             ) {
-                Text(stringResource(R.string.sign_here), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(kind.padTitle()), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1f, fill = kind == SignatureKind.SIGNATURE)
                         .fillMaxWidth()
-                        .heightIn(min = 160.dp)
+                        .heightIn(min = 160.dp, max = if (kind == SignatureKind.INITIALS) 260.dp else androidx.compose.ui.unit.Dp.Unspecified)
                         .background(Color.White, RoundedCornerShape(12.dp))
                         .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp)),
                 ) {

@@ -25,6 +25,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import nl.nvict.reader.R
 import nl.nvict.reader.data.RecentFiles
+import nl.nvict.reader.data.SignatureKind
+import nl.nvict.reader.data.Signatures
+import nl.nvict.reader.data.ThemeMode
 import nl.nvict.reader.pdf.Annotation
 import nl.nvict.reader.pdf.NRect
 import nl.nvict.reader.pdf.OpenDocument
@@ -92,6 +95,26 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     val recent = recentFiles.recent.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val darkPages = recentFiles.darkPages.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val theme = recentFiles.theme.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
+
+    /** Vaste handtekening en paraaf, gedeeld tussen beginscherm en documenten. */
+    val signatures = Signatures.get(app)
+
+    init {
+        viewModelScope.launch { signatures.load() }
+    }
+
+    fun setTheme(mode: ThemeMode) {
+        viewModelScope.launch { recentFiles.setTheme(mode) }
+    }
+
+    fun saveSignature(kind: SignatureKind, bitmap: Bitmap) {
+        viewModelScope.launch { signatures.save(kind, bitmap) }
+    }
+
+    fun deleteSignature(kind: SignatureKind) {
+        viewModelScope.launch { signatures.delete(kind) }
+    }
 
     /** Bestand dat op een wachtwoord wacht (toont de wachtwoorddialoog). */
     var passwordRequest by mutableStateOf<PasswordRequest?>(null)
@@ -393,11 +416,11 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         })
     }
 
-    /** Plaatst een handtekening op de huidige pagina (35% van de paginabreedte, midden). */
-    fun addSignature(state: DocState, bitmap: Bitmap) {
+    /** Plaatst een handtekening of paraaf midden op de huidige pagina; daarna verslepen en schalen. */
+    fun addSignature(state: DocState, bitmap: Bitmap, kind: SignatureKind = SignatureKind.SIGNATURE) {
         val page = state.currentPage
         val ratio = state.doc.pageSizes[page].ratio
-        val w = 0.35f
+        val w = kind.widthFraction
         val h = w * bitmap.height / bitmap.width / ratio
         val left = (1f - w) / 2f
         val top = (0.5f - h / 2f).coerceAtLeast(0f)

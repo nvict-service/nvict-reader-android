@@ -1,6 +1,13 @@
 package nl.nvict.reader.ui
 
+import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import nl.nvict.reader.data.ThemeMode
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -68,7 +75,28 @@ private val dark = darkColorScheme(
     onError = Color.White,
 )
 
+/** True als de app (niet per se de telefoon) een donker thema toont. */
+val LocalAppDark = staticCompositionLocalOf { false }
+
 @Composable
-fun NVictTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) dark else light, content = content)
+fun NVictTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
+    val isDark = when (mode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    // Statusbalk- en navigatiebalkiconen passend bij het gekozen thema
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !isDark
+                isAppearanceLightNavigationBars = !isDark
+            }
+        }
+    }
+    CompositionLocalProvider(LocalAppDark provides isDark) {
+        MaterialTheme(colorScheme = if (isDark) dark else light, content = content)
+    }
 }

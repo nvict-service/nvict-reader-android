@@ -263,7 +263,7 @@ private fun PageItem(
     }
 
     val pageBackground = if (darkPages) Color(0xFF121212) else Color.White
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDark = LocalAppDark.current
 
     Box(
         modifier = modifier

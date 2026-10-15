@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
@@ -86,7 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legere.pdfiumandroid.api.Bookmark
 import nl.nvict.reader.R
-import nl.nvict.reader.data.RecentFile
+import nl.nvict.reader.data.SignatureKind
 import nl.nvict.reader.pdf.Annotation
 import java.text.DateFormat
 import java.util.Date
@@ -107,6 +108,25 @@ fun ReaderScreen(vm: ReaderViewModel) {
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<ReaderDialog?>(null) }
+    var settingsOpen by remember { mutableStateOf(false) }
+    var signaturesOpen by remember { mutableStateOf(false) }
+    var padKind by remember { mutableStateOf<SignatureKind?>(null) }
+    val savedSignatures by vm.signatures.state.collectAsState()
+    val theme by vm.theme.collectAsState()
+
+    if (settingsOpen) {
+        SettingsDialog(
+            theme = theme,
+            onTheme = { vm.setTheme(it) },
+            darkPages = darkPages,
+            onDarkPages = { vm.setDarkPages(it) },
+            onSignatures = {
+                settingsOpen = false
+                signaturesOpen = true
+            },
+            onDismiss = { settingsOpen = false },
+        )
+    }
 
     // Wachtwoorddialoog
     vm.passwordRequest?.let { req ->
@@ -126,8 +146,18 @@ fun ReaderScreen(vm: ReaderViewModel) {
             onOpenRecent = { vm.open(it.uri, fromRecent = true) },
             onRemove = { vm.removeRecent(it.uri) },
             onClear = { vm.clearRecent() },
+            onSignatures = { signaturesOpen = true },
+            onSettings = { settingsOpen = true },
             onAbout = { dialog = ReaderDialog.About },
         )
+        if (signaturesOpen) {
+            SignaturesDialog(
+                saved = savedSignatures,
+                onDismiss = { signaturesOpen = false },
+                onSave = { kind, bmp -> vm.saveSignature(kind, bmp) },
+                onDelete = { vm.deleteSignature(it) },
+            )
+        }
         dialog?.let { ReaderDialogs(it, null, vm) { dialog = null } }
         return
     }
@@ -138,7 +168,6 @@ fun ReaderScreen(vm: ReaderViewModel) {
     var editMenuOpen by remember { mutableStateOf(false) }
     var saveMenuOpen by remember { mutableStateOf(false) }
     var textDialog by remember { mutableStateOf<TextDialogRequest?>(null) }
-    var signaturePicker by remember { mutableStateOf(false) }
     var closeConfirm by remember { mutableStateOf<DocState?>(null) }
     val requestClose: (DocState) -> Unit = { d -> if (d.dirty) closeConfirm = d else vm.close(d.doc.id) }
 
@@ -198,12 +227,26 @@ fun ReaderScreen(vm: ReaderViewModel) {
                                             textDialog = TextDialogRequest(null)
                                         },
                                     )
+                                    listOf(
+                                        SignatureKind.SIGNATURE to R.string.add_signature,
+                                        SignatureKind.INITIALS to R.string.add_initials,
+                                    ).forEach { (kind, label) ->
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(label)) },
+                                            leadingIcon = { Icon(Icons.Default.Draw, null) },
+                                            onClick = {
+                                                editMenuOpen = false
+                                                val bmp = savedSignatures[kind]
+                                                if (bmp != null) vm.addSignature(state, bmp, kind) else padKind = kind
+                                            },
+                                        )
+                                    }
                                     DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.add_signature)) },
-                                        leadingIcon = { Icon(Icons.Default.Draw, null) },
+                                        text = { Text(stringResource(R.string.manage_signatures)) },
+                                        leadingIcon = { Icon(Icons.Default.Settings, null) },
                                         onClick = {
                                             editMenuOpen = false
-                                            signaturePicker = true
+                                            signaturesOpen = true
                                         },
                                     )
                                     DropdownMenuItem(
@@ -260,14 +303,7 @@ fun ReaderScreen(vm: ReaderViewModel) {
                                     item(R.string.goto_page) { dialog = ReaderDialog.GoToPage }
                                     item(R.string.outline) { dialog = ReaderDialog.Outline }
                                     item(R.string.fit_width) { state.scale = 1f }
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.night_pages)) },
-                                        trailingIcon = { Checkbox(checked = darkPages, onCheckedChange = null) },
-                                        onClick = {
-                                            menuOpen = false
-                                            vm.setDarkPages(!darkPages)
-                                        },
-                                    )
+                                    item(R.string.settings) { settingsOpen = true }
                                     HorizontalDivider()
                                     item(R.string.share_document) { vm.shareDocument(state) }
                                     item(R.string.export_pages) { dialog = ReaderDialog.ExportPages }
@@ -335,12 +371,27 @@ fun ReaderScreen(vm: ReaderViewModel) {
         )
     }
 
-    if (signaturePicker) {
-        SignaturePickerDialog(
-            onDismiss = { signaturePicker = false },
-            onPick = { bitmap ->
-                signaturePicker = false
-                vm.addSignature(state, bitmap)
+    padKind?.let { kind ->
+        SignaturePadDialog(
+            kind = kind,
+            onDismiss = { padKind = null },
+            onDone = { bmp ->
+                padKind = null
+                vm.saveSignature(kind, bmp)
+                vm.addSignature(state, bmp, kind)
+            },
+        )
+    }
+
+    if (signaturesOpen) {
+        SignaturesDialog(
+            saved = savedSignatures,
+            onDismiss = { signaturesOpen = false },
+            onSave = { kind, bmp -> vm.saveSignature(kind, bmp) },
+            onDelete = { vm.deleteSignature(it) },
+            onPlace = { kind, bmp ->
+                signaturesOpen = false
+                vm.addSignature(state, bmp, kind)
             },
         )
     }
@@ -464,104 +515,6 @@ private fun SearchBar(state: DocState, vm: ReaderViewModel, onClose: () -> Unit)
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
     )
-}
-
-// ------------------------------------------------------------------ startscherm
-
-@Composable
-private fun StartScreen(
-    recent: List<RecentFile>,
-    onOpen: () -> Unit,
-    onOpenRecent: (RecentFile) -> Unit,
-    onRemove: (RecentFile) -> Unit,
-    onClear: () -> Unit,
-    onAbout: () -> Unit,
-) {
-    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.systemBars)
-                .padding(horizontal = 20.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
-            ) {
-                Icon(
-                    painterResource(R.drawable.reader_logo),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier.size(72.dp),
-                )
-                Text(
-                    stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(start = 16.dp),
-                )
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = onAbout) { Icon(Icons.Default.Info, stringResource(R.string.about)) }
-            }
-            Button(onClick = onOpen, modifier = Modifier.padding(top = 24.dp)) {
-                Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.open_file))
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 28.dp)) {
-                Text(
-                    stringResource(R.string.recent_files),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.weight(1f))
-                if (recent.isNotEmpty()) {
-                    TextButton(onClick = onClear) { Text(stringResource(R.string.clear_recent)) }
-                }
-            }
-            if (recent.isEmpty()) {
-                Text(
-                    stringResource(R.string.no_recent),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            } else {
-                val df = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
-                LazyColumn(Modifier.fillMaxSize().padding(top = 4.dp)) {
-                    items(recent, key = { it.uri.toString() }) { file ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenRecent(file) }
-                                .padding(vertical = 10.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.PictureAsPdf,
-                                null,
-                                tint = NVictColors.Error,
-                                modifier = Modifier.size(28.dp),
-                            )
-                            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                                Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    "${df.format(Date(file.openedAt))} · pagina ${file.lastPage + 1}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            IconButton(onClick = { onRemove(file) }) {
-                                Icon(Icons.Default.Delete, stringResource(R.string.remove_from_recent))
-                            }
-                        }
-                        HorizontalDivider()
-                    }
-                }
-            }
-        }
-    }
 }
 
 // ------------------------------------------------------------------ dialogen

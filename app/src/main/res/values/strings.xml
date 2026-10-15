@@ -55,4 +55,23 @@
     <string name="discard">Weggooien</string>
     <string name="saving">Opslaan…</string>
     <string name="no_signatures">Nog geen handtekeningen opgeslagen.</string>
+    <string name="signatures_title">Handtekening en paraaf</string>
+    <string name="signature">Handtekening</string>
+    <string name="initials">Paraaf</string>
+    <string name="create_signature">Handtekening maken</string>
+    <string name="create_initials">Paraaf maken</string>
+    <string name="initials_here">Teken hier je paraaf</string>
+    <string name="add_initials">Paraaf plaatsen</string>
+    <string name="manage_signatures">Handtekening en paraaf beheren</string>
+    <string name="redraw">Opnieuw tekenen</string>
+    <string name="tap_to_place">Tik om op de pagina te plaatsen</string>
+    <string name="close">Sluiten</string>
+    <string name="settings">Instellingen</string>
+    <string name="theme">Thema</string>
+    <string name="theme_system">Automatisch (volgt telefoon)</string>
+    <string name="theme_light">Licht</string>
+    <string name="theme_dark">Donker</string>
+    <string name="open_prompt">Tik hier om een PDF te openen</string>
+    <string name="show_all">Alles weergeven</string>
+    <string name="back">Terug</string>
 </resources>

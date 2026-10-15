@@ -18,14 +18,26 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 data class RecentFile(val uri: Uri, val name: String, val lastPage: Int, val openedAt: Long)
 
+/** Thema van de app: volgt de telefoon, of vast licht/donker. */
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
 /** Recente bestanden en instellingen, bewaard in DataStore. */
 class RecentFiles(private val context: Context) {
 
     private val recentKey = stringPreferencesKey("recent")
     private val darkPagesKey = booleanPreferencesKey("dark_pages")
+    private val themeKey = stringPreferencesKey("theme")
 
     val recent: Flow<List<RecentFile>> = context.dataStore.data.map { prefs -> parse(prefs[recentKey]) }
     val darkPages: Flow<Boolean> = context.dataStore.data.map { it[darkPagesKey] ?: false }
+
+    val theme: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
+        runCatching { ThemeMode.valueOf(prefs[themeKey] ?: ThemeMode.SYSTEM.name) }.getOrDefault(ThemeMode.SYSTEM)
+    }
+
+    suspend fun setTheme(mode: ThemeMode) {
+        context.dataStore.edit { it[themeKey] = mode.name }
+    }
 
     suspend fun setDarkPages(on: Boolean) {
         context.dataStore.edit { it[darkPagesKey] = on }
