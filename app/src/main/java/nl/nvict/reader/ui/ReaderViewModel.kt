@@ -29,6 +29,8 @@ import nl.nvict.reader.data.SignatureKind
 import nl.nvict.reader.data.Signatures
 import nl.nvict.reader.data.ThemeMode
 import nl.nvict.reader.pdf.Annotation
+import nl.nvict.reader.pdf.FormInfo
+import nl.nvict.reader.pdf.FormReader
 import nl.nvict.reader.pdf.NRect
 import nl.nvict.reader.pdf.OpenDocument
 import nl.nvict.reader.pdf.PdfEditor
@@ -63,12 +65,24 @@ class DocState(initialDoc: OpenDocument) {
     /** Id van de tekst waarvan de bewerkdialoog open staat. */
     var editingText by mutableStateOf<Long?>(null)
     var saving by mutableStateOf(false)
-    internal val undoStack = ArrayDeque<List<Annotation>>()
+    internal val undoStack = ArrayDeque<EditSnapshot>()
+
+    // Invulformulier (null = geen formulier of nog aan het laden)
+    var form by mutableStateOf<FormInfo?>(null)
+    var formValues by mutableStateOf<Map<String, String>>(emptyMap())
+    var formBannerDismissed by mutableStateOf(false)
+
+    /** Velden waarvan de waarde afwijkt van wat in het bestand staat. */
+    val changedFormValues: Map<String, String>
+        get() = form?.let { f -> formValues.filter { (k, v) -> f.initialValues[k] != v } } ?: emptyMap()
     var canUndo by mutableStateOf(false)
 
     val currentHit: SearchHit? get() = searchHits.getOrNull(searchIndex)
-    val dirty: Boolean get() = annotations.isNotEmpty()
+    val dirty: Boolean get() = annotations.isNotEmpty() || changedFormValues.isNotEmpty()
 }
+
+/** Stand van alle bewerkingen, voor ongedaan maken. */
+data class EditSnapshot(val annotations: List<Annotation>, val formValues: Map<String, String>)
 
 /** Verzoek om naar een pagina te scrollen; [token] maakt elk verzoek uniek. */
 data class ScrollRequest(val page: Int, val token: Long = System.nanoTime())
@@ -157,6 +171,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val doc = OpenDocument.open(ctx, uri, name, password)
                 val state = DocState(doc)
+                loadForm(state)
                 val last = recentFiles.lastPage(uri).coerceIn(0, doc.pageCount - 1)
                 state.currentPage = last
                 if (last > 0) state.scrollRequest = ScrollRequest(last)
@@ -364,16 +379,21 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     var highlightColor by mutableIntStateOf(nl.nvict.reader.pdf.HighlightColors.all.first().first)
         private set
 
-    private fun commit(state: DocState, newList: List<Annotation>) {
-        state.undoStack.addLast(state.annotations)
+    private fun pushUndo(state: DocState) {
+        state.undoStack.addLast(EditSnapshot(state.annotations, state.formValues))
         if (state.undoStack.size > 50) state.undoStack.removeFirst()
-        state.annotations = newList
         state.canUndo = true
+    }
+
+    private fun commit(state: DocState, newList: List<Annotation>) {
+        pushUndo(state)
+        state.annotations = newList
     }
 
     fun undo(state: DocState) {
         val prev = state.undoStack.removeLastOrNull() ?: return
-        state.annotations = prev
+        state.annotations = prev.annotations
+        state.formValues = prev.formValues
         state.canUndo = state.undoStack.isNotEmpty()
         if (state.annotations.none { it.id == state.selectedAnnotation }) state.selectedAnnotation = null
     }
@@ -431,8 +451,29 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Begin van verslepen/schalen: één stap op de ongedaan-maken-stapel. */
     fun beginTransform(state: DocState) {
-        state.undoStack.addLast(state.annotations)
-        state.canUndo = true
+        pushUndo(state)
+    }
+
+    // ---------------------------------------------------------------- formulier
+
+    /**
+     * Zet een veldwaarde. [newUndoStep] = false bij doortypen in hetzelfde tekstveld, zodat niet elke
+     * letter een aparte stap op de ongedaan-maken-stapel wordt.
+     */
+    fun setFieldValue(state: DocState, name: String, value: String, newUndoStep: Boolean = true) {
+        if (state.formValues[name] == value) return
+        if (newUndoStep) pushUndo(state)
+        state.formValues = state.formValues + (name to value)
+    }
+
+    private fun loadForm(state: DocState) {
+        val doc = state.doc
+        viewModelScope.launch {
+            val info = runCatching { FormReader.read(ctx, doc) }.getOrNull()
+            if (state.doc !== doc) return@launch // intussen opnieuw geladen
+            state.form = info?.takeIf { !it.isEmpty || it.dynamicXfa }
+            state.formValues = info?.initialValues ?: emptyMap()
+        }
     }
 
     fun moveAnnotation(state: DocState, id: Long, dx: Float, dy: Float) {
@@ -485,7 +526,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                     return@launch
                 }
                 val tmp = File(exportDir(), "opslaan_${System.currentTimeMillis()}.pdf")
-                FileOutputStream(tmp).use { PdfEditor.apply(ctx, old, state.annotations, it) }
+                FileOutputStream(tmp).use { PdfEditor.apply(ctx, old, state.annotations, it, state.changedFormValues) }
 
                 if (target == null) {
                     // Pdfium leest uit het originele bestand: eerst sluiten, dan overschrijven
@@ -531,7 +572,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 state.saving = true
                 val file = File(exportDir(), editedName(state))
-                FileOutputStream(file).use { PdfEditor.apply(ctx, state.doc, state.annotations, it) }
+                FileOutputStream(file).use { PdfEditor.apply(ctx, state.doc, state.annotations, it, state.changedFormValues) }
                 _events.send(UiEvent.ShareFile(file, "application/pdf", file.name))
             } catch (e: Throwable) {
                 _events.send(UiEvent.Toast(ctx.getString(R.string.save_failed, e.message ?: "")))
@@ -550,6 +591,9 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         val name = displayName(uri)
         val fresh = OpenDocument.open(ctx, uri, name, null)
         state.doc = fresh
+        state.form = null
+        state.formValues = emptyMap()
+        loadForm(state)
         state.selection = null
         if (wasActive) _activeId.value = fresh.id
         state.scrollRequest = ScrollRequest(state.currentPage.coerceIn(0, fresh.pageCount - 1))

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TextFields
@@ -321,6 +322,14 @@ fun ReaderScreen(vm: ReaderViewModel) {
                         ),
                     )
                 }
+                state.form?.let { form ->
+                    if (!state.formBannerDismissed) {
+                        FormBanner(
+                            text = stringResource(if (form.isEmpty) R.string.form_xfa else R.string.form_detected),
+                            onClose = { state.formBannerDismissed = true },
+                        )
+                    }
+                }
                 if (docs.size > 1) {
                     DocumentTabs(docs = docs, active = state, onSelect = { vm.setActive(it) }, onClose = { id ->
                         docs.firstOrNull { it.doc.id == id }?.let { requestClose(it) }
@@ -423,6 +432,27 @@ fun ReaderScreen(vm: ReaderViewModel) {
 
 /** Dialoog voor nieuwe tekst ([id] == null) of het bewerken van bestaande tekst. */
 data class TextDialogRequest(val id: Long?)
+
+@Composable
+private fun FormBanner(text: String, onClose: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.primaryContainer) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        ) {
+            Icon(Icons.Default.EditNote, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+            )
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, stringResource(R.string.close), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+        }
+    }
+}
 
 @Composable
 private fun DocumentTabs(

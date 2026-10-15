@@ -176,6 +176,26 @@ class OpenDocument private constructor(
         }
     }
 
+    /**
+     * Zet rechthoeken in PDF-coördinaten (left, top=bovenrand, right, bottom=onderrand) om naar genormaliseerde
+     * schermcoördinaten. Alle vier hoeken worden omgerekend, zodat ook gedraaide pagina's kloppen.
+     */
+    suspend fun pdfRectsToNormalized(pageIndex: Int, rects: List<RectF>): List<NRect> = locked {
+        val p = page(pageIndex)
+        val w = 4000
+        val h = (w * pageSizes[pageIndex].ratio).toInt().coerceAtLeast(1)
+        rects.map { r ->
+            val pts = listOf(r.left to r.top, r.right to r.top, r.left to r.bottom, r.right to r.bottom)
+                .map { (x, y) -> p.mapPageCoordsToDevice(0, 0, w, h, 0, x.toDouble(), y.toDouble()) }
+            NRect(
+                pts.minOf { it.x } / w.toFloat(),
+                pts.minOf { it.y } / h.toFloat(),
+                pts.maxOf { it.x } / w.toFloat(),
+                pts.maxOf { it.y } / h.toFloat(),
+            )
+        }
+    }
+
     suspend fun outline(): List<Bookmark> = locked { doc.getTableOfContents() }
 
     suspend fun meta(): Meta = locked { doc.getDocumentMeta() }

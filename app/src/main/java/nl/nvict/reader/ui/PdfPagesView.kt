@@ -45,6 +45,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -217,6 +218,7 @@ private fun PageItem(
     val renderHeight = (renderWidth * doc.pageSizes[pageIndex].ratio).roundToInt().coerceAtLeast(1)
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
 
     // Rendering: cache eerst, anders renderen (met korte vertraging zodat knijpzoom niet elke frame rendert)
     val bitmap: State<Bitmap?> = produceState<Bitmap?>(
@@ -370,7 +372,8 @@ private fun PageItem(
                         onDoubleTap(up.position)
                         return@awaitEachGesture
                     }
-                    // 4) Enkele tik: markering selecteren, selectie opheffen, of link openen
+                    // 4) Enkele tik: invulveld verlaten, markering selecteren, selectie opheffen, of link openen
+                    focusManager.clearFocus()
                     val hl = hitTest(mine.filterIsInstance<Annotation.Highlight>(), up.position, widthPx, heightPx, pageWidthPt, tolerance / 2)
                     if (hl != null) {
                         state.selection = null
@@ -397,6 +400,14 @@ private fun PageItem(
                 contentScale = ContentScale.FillBounds,
             )
         }
+        FormOverlay(
+            state = state,
+            vm = vm,
+            pageIndex = pageIndex,
+            widthPx = widthPx,
+            heightPx = heightPx,
+            pageWidthPt = doc.pageSizes[pageIndex].widthPt,
+        )
         if (selectionRects.isNotEmpty() || hitRects.isNotEmpty()) {
             val selColor = if (isDark) NVictColors.SelectionDark else NVictColors.SelectionLight
             val handleColor = NVictColors.Accent

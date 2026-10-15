@@ -10,6 +10,9 @@ import com.tom_roush.pdfbox.pdmodel.graphics.color.PDColor
 import com.tom_roush.pdfbox.pdmodel.graphics.color.PDDeviceRGB
 import com.tom_roush.pdfbox.pdmodel.graphics.image.LosslessFactory
 import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup
+import com.tom_roush.pdfbox.pdmodel.interactive.form.PDButton
+import com.tom_roush.pdfbox.pdmodel.interactive.form.PDChoice
+import com.tom_roush.pdfbox.pdmodel.interactive.form.PDTextField
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.OutputStream
@@ -27,7 +30,13 @@ object PdfEditor {
     private val font = PDType1Font.HELVETICA
     private const val LINE_HEIGHT = 1.25f
 
-    suspend fun apply(context: Context, doc: OpenDocument, annotations: List<Annotation>, out: OutputStream) {
+    suspend fun apply(
+        context: Context,
+        doc: OpenDocument,
+        annotations: List<Annotation>,
+        out: OutputStream,
+        formValues: Map<String, String> = emptyMap(),
+    ) {
         // 1) Alle coördinaten vooraf omrekenen via Pdfium (suspend), per annotatie
         val resolved = annotations.map { a -> a to resolve(doc, a) }
 
@@ -37,6 +46,7 @@ object PdfEditor {
             val pdf = input.use { PDDocument.load(it, doc.password ?: "") }
             try {
                 pdf.isAllSecurityToBeRemoved = true
+                if (formValues.isNotEmpty()) writeFormValues(pdf, formValues)
                 resolved.forEach { (a, pts) ->
                     val page = pdf.getPage(a.page)
                     when (a) {
@@ -51,6 +61,28 @@ object PdfEditor {
                 pdf.close()
             }
         }
+    }
+
+    /**
+     * Zet de ingevulde waarden in de echte formuliervelden. PdfBox maakt daarbij de weergave opnieuw aan;
+     * lukt dat niet (bijvoorbeeld een ontbrekend lettertype), dan vraagt het document de viewer dat te doen.
+     */
+    private fun writeFormValues(pdf: PDDocument, values: Map<String, String>) {
+        val form = pdf.documentCatalog.acroForm ?: return
+        var needAppearances = false
+        values.forEach { (name, value) ->
+            val field = form.getField(name) ?: return@forEach
+            try {
+                when (field) {
+                    is PDTextField -> field.setValue(value)
+                    is PDButton -> field.setValue(value) // optiewaarde of "Off"
+                    is PDChoice -> field.setValue(value)
+                }
+            } catch (e: Exception) {
+                needAppearances = true
+            }
+        }
+        if (needAppearances) form.setNeedAppearances(true)
     }
 
     /** Hoekpunten in PDF-punten: per annotatie de punten die de schrijver nodig heeft. */

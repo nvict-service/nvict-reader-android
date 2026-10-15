@@ -6,6 +6,9 @@ Pdfium-engine (Apache 2.0, dus zonder licentiekosten geschikt voor de Play Store
 ## Functies
 - Beginscherm zoals Fill & Sign: grote openknop en recente bestanden met miniatuur, tijdstip en grootte
   ("Alles weergeven" voor de volledige lijst; lang indrukken om uit de lijst te halen).
+- **Invulformulieren** (AcroForm): tekstvelden, vinkjes, keuzerondjes en keuzelijsten worden herkend en zijn tikbaar.
+  Waarden worden in de echte velden opgeslagen, dus ook leesbaar en wijzigbaar in Acrobat. Dynamische XFA-formulieren
+  worden gemeld maar kunnen niet ingevuld worden.
 - Vaste **handtekening en paraaf** (pen-icoon op het beginscherm of in Bewerken): één keer tekenen, daarna met één tik
   plaatsen. Opnieuw tekenen of verwijderen kan altijd.
 - Thema: Automatisch (volgt de telefoon), Licht of Donker — via ⋮ > Instellingen.

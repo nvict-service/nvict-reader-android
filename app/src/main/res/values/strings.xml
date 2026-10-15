@@ -74,4 +74,6 @@
     <string name="open_prompt">Tik hier om een PDF te openen</string>
     <string name="show_all">Alles weergeven</string>
     <string name="back">Terug</string>
+    <string name="form_detected">Dit document bevat een invulformulier. Tik op een blauw veld om het in te vullen.</string>
+    <string name="form_xfa">Dit is een XFA-formulier. Dat kan alleen in Adobe Acrobat worden ingevuld; je kunt wel tekst en je handtekening toevoegen.</string>
 </resources>
